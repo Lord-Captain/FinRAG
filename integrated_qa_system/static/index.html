@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>金融智能问答系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
+        .header { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: white; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { font-size: 20px; font-weight: 500; }
+        .header .session-info { font-size: 12px; opacity: 0.8; }
+        .chat-container { flex: 1; overflow-y: auto; padding: 20px 24px; max-width: 900px; width: 100%; margin: 0 auto; }
+        .message { margin-bottom: 16px; display: flex; gap: 10px; }
+        .message.user { flex-direction: row-reverse; }
+        .message .avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+        .message.user .avatar { background: #1a73e8; color: white; }
+        .message.bot .avatar { background: #e8eaed; color: #444; }
+        .message .bubble { max-width: 70%; padding: 12px 16px; border-radius: 12px; line-height: 1.6; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+        .message.user .bubble { background: #1a73e8; color: white; border-top-right-radius: 4px; }
+        .message.bot .bubble { background: white; color: #333; border-top-left-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .input-area { background: white; border-top: 1px solid #e0e0e0; padding: 16px 24px; }
+        .input-wrapper { max-width: 900px; margin: 0 auto; display: flex; gap: 10px; align-items: center; }
+        .source-select { padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; background: white; min-width: 100px; }
+        .input-wrapper input { flex: 1; padding: 10px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.2s; }
+        .input-wrapper input:focus { border-color: #1a73e8; }
+        .input-wrapper button { padding: 10px 20px; background: #1a73e8; color: white; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; transition: background 0.2s; }
+        .input-wrapper button:hover { background: #1557b0; }
+        .input-wrapper button:disabled { background: #ccc; cursor: not-allowed; }
+        .toolbar { display: flex; gap: 8px; }
+        .toolbar button { padding: 6px 12px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); border-radius: 6px; font-size: 12px; cursor: pointer; }
+        .toolbar button:hover { background: rgba(255,255,255,0.3); }
+        .typing-indicator { display: inline-flex; gap: 4px; padding: 4px 0; }
+        .typing-indicator span { width: 6px; height: 6px; background: #999; border-radius: 50%; animation: bounce 1.4s infinite; }
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>金融智能问答系统</h1>
+            <div class="session-info" id="sessionId">会话加载中...</div>
+        </div>
+        <div class="toolbar">
+            <button onclick="clearHistory()">清除历史</button>
+            <button onclick="newSession()">新会话</button>
+        </div>
+    </div>
+
+    <div class="chat-container" id="chatContainer"></div>
+
+    <div class="input-area">
+        <div class="input-wrapper">
+            <select class="source-select" id="sourceFilter">
+                <option value="">不过滤</option>
+                <option value="stock">股票</option>
+                <option value="fund">基金</option>
+                <option value="bank">银行</option>
+                <option value="insurance">保险</option>
+                <option value="futures">期货</option>
+            </select>
+            <input type="text" id="queryInput" placeholder="输入您的金融问题..." autocomplete="off">
+            <button id="sendBtn" onclick="sendMessage()">发送</button>
+        </div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let ws = null;
+        let currentBotBubble = null;
+
+        // 初始化
+        async function init() {
+            await createSession();
+            document.getElementById('queryInput').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+            });
+        }
+
+        // 创建会话
+        async function createSession() {
+            const res = await fetch('/api/create_session', { method: 'POST' });
+            const data = await res.json();
+            sessionId = data.session_id;
+            document.getElementById('sessionId').textContent = '会话: ' + sessionId.substring(0, 8) + '...';
+        }
+
+        // 新会话
+        async function newSession() {
+            document.getElementById('chatContainer').innerHTML = '';
+            await createSession();
+            addBotMessage('已开始新会话，请问有什么可以帮您？');
+        }
+
+        // 清除历史
+        async function clearHistory() {
+            if (!sessionId) return;
+            await fetch('/api/history/' + sessionId, { method: 'DELETE' });
+            document.getElementById('chatContainer').innerHTML = '';
+            addBotMessage('对话历史已清除。');
+        }
+
+        // 添加用户消息
+        function addUserMessage(text) {
+            const container = document.getElementById('chatContainer');
+            container.innerHTML += `<div class="message user"><div class="avatar">我</div><div class="bubble">${escapeHtml(text)}</div></div>`;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 添加机器人消息
+        function addBotMessage(text) {
+            const container = document.getElementById('chatContainer');
+            const id = 'bot-' + Date.now();
+            container.innerHTML += `<div class="message bot"><div class="avatar">AI</div><div class="bubble" id="${id}">${escapeHtml(text)}</div></div>`;
+            container.scrollTop = container.scrollHeight;
+            return document.getElementById(id);
+        }
+
+        // 添加打字指示器
+        function addTypingIndicator() {
+            const container = document.getElementById('chatContainer');
+            const id = 'typing-' + Date.now();
+            container.innerHTML += `<div class="message bot" id="${id}-wrapper"><div class="avatar">AI</div><div class="bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div></div>`;
+            container.scrollTop = container.scrollHeight;
+            return id;
+        }
+
+        function removeTyping(id) {
+            const el = document.getElementById(id + '-wrapper');
+            if (el) el.remove();
+        }
+
+        function escapeHtml(text) {
+            return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+        }
+
+        // 发送消息 (WebSocket流式)
+        async function sendMessage() {
+            const input = document.getElementById('queryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            input.value = '';
+            addUserMessage(query);
+
+            const sourceFilter = document.getElementById('sourceFilter').value;
+            const typingId = addTypingIndicator();
+
+            // WebSocket 流式连接
+            const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(protocol + '//' + location.host + '/api/stream');
+
+            ws.onopen = function() {
+                ws.send(JSON.stringify({
+                    query: query,
+                    source_filter: sourceFilter || null,
+                    session_id: sessionId
+                }));
+            };
+
+            let botBubble = null;
+            let fullAnswer = '';
+
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'start') {
+                    removeTyping(typingId);
+                    botBubble = addBotMessage('');
+                } else if (data.type === 'token') {
+                    fullAnswer += data.token;
+                    if (botBubble) botBubble.innerHTML = escapeHtml(fullAnswer);
+                    document.getElementById('chatContainer').scrollTop = document.getElementById('chatContainer').scrollHeight;
+                } else if (data.type === 'end') {
+                    if (!botBubble) {
+                        removeTyping(typingId);
+                        addBotMessage('收到回复，但内容为空。');
+                    }
+                    btn.disabled = false;
+                    ws.close();
+                } else if (data.type === 'error') {
+                    removeTyping(typingId);
+                    addBotMessage('出错了: ' + data.error);
+                    btn.disabled = false;
+                    ws.close();
+                }
+            };
+
+            ws.onerror = function() {
+                removeTyping(typingId);
+                addBotMessage('连接出错，请检查服务是否正常运行。');
+                btn.disabled = false;
+            };
+
+            ws.onclose = function() {
+                btn.disabled = false;
+            };
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>

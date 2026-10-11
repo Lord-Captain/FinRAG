@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual Environment
+venv/
+.venv/
+env/
+.conda/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Models (large binary files - do NOT push to GitHub)
+integrated_qa_system/rag_qa/models/bert-base-chinese/pytorch_model.bin
+integrated_qa_system/rag_qa/models/bert-base-chinese/flax_model.msgpack
+integrated_qa_system/rag_qa/models/bert-base-chinese/tf_model.h5
+integrated_qa_system/rag_qa/models/bge-m3/pytorch_model.bin
+integrated_qa_system/rag_qa/models/bge-m3/colbert_linear.pt
+integrated_qa_system/rag_qa/models/bge-m3/sparse_linear.pt
+integrated_qa_system/rag_qa/models/bge-reranker-large/pytorch_model.bin
+integrated_qa_system/rag_qa/models/bert_query_classifier/model.safetensors
+
+# Docker volumes (local data)
+volumes/
+
+# Test scripts
+test_startup.py
+build_vector_index.py
+
+# Cache
+*.cache
+.qoder-cn/
