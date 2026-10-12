@@ -60,7 +60,7 @@ class Config():
 
         # 3.5 解析LLM
         self.LLM_MODEL = self.config.get('llm', 'model', fallback='qwen-plus')
-        self.DASHSCOPE_API_KEY = self.config.get('llm', 'dashscope_api_key', fallback='sk-9642eef7bc644252bb01a0ed369cfe14')
+        self.DASHSCOPE_API_KEY = self.config.get('llm', 'dashscope_api_key', fallback='') # fallback写上你自己的api-key
         self.DASHSCOPE_BASE_URL = self.config.get('llm', 'dashscope_base_url', fallback='https://dashscope.aliyuncs.com/compatible-mode/v1')
 
         # 3.6 检索参数配置
